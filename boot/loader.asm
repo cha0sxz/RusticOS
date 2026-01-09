@@ -48,14 +48,17 @@ real_mode_start:
     ; Print loader start message
     mov si, msg_loader_start
     call print_string
+    call delay
 
     ; Print kernel loading message
     mov si, msg_kernel_loading
     call print_string
+    call delay
 
     ; Load kernel with LBA
     mov si, msg_chs
     call print_string
+    call delay
     
     ; Hide cursor during loading
     mov ah, 0x01
@@ -94,6 +97,7 @@ real_mode_start:
     ; Success
     mov si, msg_kernel_loaded
     call print_string
+    call delay
 
     ; Success - proceed to PM
     jmp .kernel_valid
@@ -108,6 +112,7 @@ real_mode_start:
     ; About to enter PM
     mov si, msg_entering_pm
     call print_string
+    call delay
 
     ; Prepare to enter protected mode and jump to kernel at 0x00000000
 
@@ -155,6 +160,29 @@ print_string:
     int 0x10
     jmp .loop
 .done:
+    ret
+
+; Delay function - provides a visible delay for messages
+; Approximately 2-3 seconds on typical systems
+delay:
+    push ax
+    push cx
+    push dx
+    mov ax, 0x0040          ; Outer loop counter (64 iterations)
+.delay_outer:
+    mov cx, 0xFFFF          ; Middle loop counter (65535 iterations)
+.delay_middle:
+    mov dx, 0x00FF          ; Inner loop counter (255 iterations)
+.delay_inner:
+    dec dx
+    jnz .delay_inner
+    dec cx
+    jnz .delay_middle
+    dec ax
+    jnz .delay_outer
+    pop dx
+    pop cx
+    pop ax
     ret
 
 ; Print 32-bit hex number

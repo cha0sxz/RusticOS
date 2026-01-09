@@ -25,7 +25,7 @@ LDFLAGS := -m elf_i386 -static -nostdlib -T linker.ld
 # Source files
 KERNEL_SOURCES := $(SRC_DIR)/kernel.cpp $(SRC_DIR)/terminal.cpp $(SRC_DIR)/keyboard.cpp \
                   $(SRC_DIR)/command.cpp $(SRC_DIR)/filesystem.cpp $(SRC_DIR)/virtual_disk.cpp \
-                  $(SRC_DIR)/cxxabi.cpp
+                  $(SRC_DIR)/interrupt.cpp $(SRC_DIR)/cxxabi.cpp
 KERNEL_ASM := $(SRC_DIR)/crt0.s
 KERNEL_OBJS := $(BUILD_DIR)/crt0.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(KERNEL_SOURCES))
 
@@ -157,7 +157,7 @@ image: $(DISK_IMG)
 # Run in QEMU with VNC display
 run: $(DISK_IMG)
 	@echo "Running QEMU in its own window..."
-	@pkill -9 qemu; sleep 1; $(QEMU) -drive file=$<,format=raw,if=ide,index=0 -boot c -m 512M -vga std -serial stdio -no-shutdown -no-reboot
+	@pkill -9 qemu; sleep 1; $(QEMU) -drive file=$<,format=raw,if=ide,index=0 -boot c -m 512M -vga std -serial stdio -device isa-debug-exit,iobase=0xf4,iosize=0x04 || true
 
 # Run in QEMU with debugging (no reboot on halt)
 run-debug: $(DISK_IMG)

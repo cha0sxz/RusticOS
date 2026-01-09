@@ -16,6 +16,7 @@
 #include "keyboard.h"
 #include "filesystem.h"
 #include "command.h"
+#include "interrupt.h"
 
 /* ============================================================================
  * HARDWARE CONSTANTS & MACROS
@@ -67,10 +68,7 @@
  * ============================================================================ */
 
 extern CommandSystem command_system;
-
-// Prompt position tracking (prevents backspace from deleting the prompt '>')
-static uint16_t prompt_start_x = 0;
-static uint16_t prompt_start_y = 0;
+extern KeyboardDriver keyboard;
 
 /* ============================================================================
  * FORWARD DECLARATIONS
@@ -518,16 +516,42 @@ extern "C" void kernel_main() {
     
     serial_write("Display ready.\n");
     
+    // Initialize interrupt handling
+    serial_write("Initializing interrupts...\n");
+    init_pic();              // Initialize Programmable Interrupt Controller
+    // IDT already initialized in crt0.s via init_idt() call
+    
     // Initialize keyboard controller
     serial_write("Initializing keyboard...\n");
-    init_keyboard();
-    serial_write("===== KERNEL READY =====\n");
+    keyboard.init();         // Initialize keyboard driver
+    init_keyboard();         // Clear keyboard buffer
     
-    // Main kernel event loop - poll keyboard for input
+    // Enable interrupts
+    serial_write("Enabling interrupts...\n");
+    enable_interrupts();
+    serial_write("===== KERNEL READY (Interrupt-driven) =====\n");
+    
+    // Main kernel event loop - check keyboard buffer (interrupt-driven)
     while (true) {
-        poll_keyboard();
+        // Check for keyboard events (filled by interrupt handler)
+        KeyEvent event;
+        if (keyboard.get_key_event(event)) {
+            // Process the key event
+            if (event.ascii != 0) {
+                // Send the input character to the command system for processing
+                command_system.process_input(event.ascii);
+                
+                // Check if a complete command has been entered (user pressed Enter)
+                if (command_system.is_input_complete()) {
+                    command_system.execute_command();
+                    command_system.reset_input();
+                    terminal.write("> ");  // Display prompt for next command
+                }
+            }
+        }
         
-        // Small delay to prevent excessive CPU usage
-        for (volatile int i = 0; i < DELAY_SHORT; i++);
+        // Small delay to prevent excessive CPU usage when no events
+        // This is much more efficient than polling the keyboard port
+        for (volatile int i = 0; i < 1000; i++);  // Reduced delay since interrupts handle I/O
     }
 }

@@ -58,7 +58,7 @@ static void redraw_title_bar() {
     // Write title bar text directly to VGA buffer
     const char* title = "RusticOS";
     const char* level = "Level:Kernel";
-    const char* version = "Version:1.0.0";
+    const char* version = "Version:1.0.1";
     
     // Write "RusticOS" at column 15
     for (uint16_t i = 0; title[i] != '\0' && (15 + i) < 80; ++i) {

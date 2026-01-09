@@ -1,11 +1,15 @@
 # ============================================================================
 # RusticOS - 32-bit Startup (crt0)
 # ----------------------------------------------------------------------------
-# Minimal and robust 32-bit startup
+# Minimal and robust 32-bit startup with interrupt handling
 # ============================================================================
 
 .global _start
+.global idt_flush
 .extern kernel_main
+.extern exception_handler
+.extern irq_handler
+.extern init_idt
 
 .section .text
 .code32
@@ -18,85 +22,8 @@ _start:
     movl $0x1f52, %eax   # R in white
     movl %eax, (%edi)
     
-    # Reload GDT
-    # lea gdt_ptr, %eax
-    # lgdt (%eax)
-    
-    # Reload segment registers
-    # movw $0x10, %ax
-    # movw %ax, %ds
-    # movw %ax, %es
-    # movw %ax, %fs
-    # movw %ax, %gs
-    # movw %ax, %ss
-    # Early serial trace: write "KERNEL PM\n" to COM1 (port 0x3F8)
-    # leal serial_msg, %esi
-    # movw $0x3F8, %dx
-# 1:  lodsb
-    # testb %al, %al
-    # je 2f
-    # movw $0x3F8, %dx
-    # outb %al, (%dx)
-    # jmp 1b
-# 2:
-    
-    # Print 'K' to VGA text buffer to confirm kernel entry
-    # movl $0xb8000, %edi
-    # movl $0x1f4b, %eax   # K in green
-    # movl %eax, (%edi)
-
     # GDT already loaded by loader, segment registers already set
     # Just verify we're in protected mode and continue
-
-    # Disable NMI and mask PIC IRQs
-    # movw $0x70, %dx
-    # inb (%dx), %al
-    # orb $0x80, %al
-    # outb %al, (%dx)
-    # movw $0x21, %dx
-    # movb $0xFF, %al
-    # outb %al, (%dx)
-    # movw $0xA1, %dx
-    # outb %al, (%dx)
-
-    # movl $0xb8006, %edi
-    # movl $0x1f4e, %eax   # N in green
-    # movl %eax, (%edi)
-
-    # Build IDT with halting handler for all vectors
-    # lea idt, %edi
-    # xorl %eax, %eax
-    # movl $256*8/4, %ecx
-    # rep stosl                      # zero IDT
-
-    # Fill all 256 IDT entries with interrupt gate to isr_stub
-    # lea isr_stub, %ebx             # ebx = handler address (save it)
-    # movl $0, %esi                  # esi = current IDT entry offset (0..255*8)
-# .fill_idt:
-    # cmpl $256*8, %esi
-    # jge .fill_idt_done
-    
-    # movw %bx, idt+0(%esi)          # offset_low (16-bit)
-    # movw $0x08, idt+2(%esi)        # selector (16-bit)
-    # movl $0, idt+4(%esi)           # reserved (32-bit, zero)
-    # movb $0x8E, idt+5(%esi)        # type_attr (8-bit)
-    # movl %ebx, %eax
-    # shrl $16, %eax                 # eax = high 16 bits of handler
-    # movw %ax, idt+6(%esi)          # offset_high (16-bit)
-    
-    # addl $8, %esi
-    # jmp .fill_idt
-
-# .fill_idt_done:
-    # Load IDT
-    # lea idt_ptr, %eax
-    # lidt (%eax)
-    
-    # sti
-
-    # movl $0xb8008, %edi
-    # movl $0x1f49, %eax   # I in green
-    # movl %eax, (%edi)
 
     # Stack: use 0x00090000 (kernel at 0x00090000, stack below it)
     movl $0x00088000, %esp
@@ -173,27 +100,216 @@ _start:
     #movb $'S', (%edi)
     #movb $0x20, 1(%edi)
 
+    # Initialize IDT (this sets up the interrupt descriptor table)
+    call init_idt
+    
+    # Load IDT
+    lea idt_ptr, %eax
+    lidt (%eax)
+    
     call kernel_main
 
 .hang:
     hlt
     jmp .hang
 
-# IDT
+# ============================================================================
+# Interrupt Descriptor Table (IDT) Setup
+# ============================================================================
+
+# IDT (exported so C++ code can access it)
 .section .data
 .align 8
+.global idt
 idt:
     .space 256*8, 0
+.global idt_ptr
 idt_ptr:
     .word (256*8 - 1)
     .long idt
+
+# ============================================================================
+# Interrupt Service Routines (ISRs)
+# ============================================================================
+
+# Macro to create ISR stub without error code
+.macro ISR_NOERRCODE num
+    .global isr\num
+    isr\num:
+        cli
+        pushl $0              # Push dummy error code
+        pushl $\num           # Push interrupt number
+        jmp isr_common_stub
+.endm
+
+# Macro to create ISR stub with error code
+.macro ISR_ERRCODE num
+    .global isr\num
+    isr\num:
+        cli
+        pushl $\num           # Push interrupt number (error code already on stack)
+        jmp isr_common_stub
+.endm
+
+# Macro to create IRQ stub
+.macro IRQ num, irq_num
+    .global irq\num
+    irq\num:
+        cli
+        pushl $0              # Push dummy error code
+        pushl $\irq_num       # Push IRQ number
+        jmp irq_common_stub
+.endm
+
+# Create ISR stubs for exceptions (0-31)
+ISR_NOERRCODE 0   # Divide by Zero
+ISR_NOERRCODE 1   # Debug
+ISR_NOERRCODE 2   # Non-Maskable Interrupt
+ISR_NOERRCODE 3   # Breakpoint
+ISR_NOERRCODE 4   # Overflow
+ISR_NOERRCODE 5   # Bound Range Exceeded
+ISR_NOERRCODE 6   # Invalid Opcode
+ISR_NOERRCODE 7   # Device Not Available
+ISR_ERRCODE 8     # Double Fault
+ISR_NOERRCODE 9   # Coprocessor Segment Overrun
+ISR_ERRCODE 10    # Invalid TSS
+ISR_ERRCODE 11    # Segment Not Present
+ISR_ERRCODE 12    # Stack Fault
+ISR_ERRCODE 13    # General Protection Fault
+ISR_ERRCODE 14    # Page Fault
+ISR_NOERRCODE 15  # Reserved
+ISR_NOERRCODE 16  # x87 FPU Floating-Point Error
+ISR_ERRCODE 17    # Alignment Check
+ISR_NOERRCODE 18  # Machine Check
+ISR_NOERRCODE 19  # SIMD Floating-Point Exception
+ISR_NOERRCODE 20  # Virtualization Exception
+ISR_NOERRCODE 21  # Control Protection Exception
+ISR_NOERRCODE 22  # Reserved
+ISR_NOERRCODE 23  # Reserved
+ISR_NOERRCODE 24  # Reserved
+ISR_NOERRCODE 25  # Reserved
+ISR_NOERRCODE 26  # Reserved
+ISR_NOERRCODE 27  # Reserved
+ISR_NOERRCODE 28  # Hypervisor Injection Exception
+ISR_NOERRCODE 29  # VMM Communication Exception
+ISR_ERRCODE 30    # Security Exception
+ISR_NOERRCODE 31  # Reserved
+
+# Create IRQ stubs for hardware interrupts (32-47)
+IRQ 32, 0   # Timer
+IRQ 33, 1   # Keyboard
+IRQ 34, 2   # Cascade
+IRQ 35, 3   # COM2
+IRQ 36, 4   # COM1
+IRQ 37, 5   # LPT2
+IRQ 38, 6   # Floppy
+IRQ 39, 7   # LPT1
+IRQ 40, 8   # CMOS
+IRQ 41, 9   # Free
+IRQ 42, 10  # Free
+IRQ 43, 11  # Free
+IRQ 44, 12  # PS/2 Mouse
+IRQ 45, 13  # FPU
+IRQ 46, 14  # Primary ATA
+IRQ 47, 15  # Secondary ATA
+
+# Common exception handler stub
+isr_common_stub:
+    # Save all registers
+    pusha
+    
+    # Save segment registers
+    pushl %ds
+    pushl %es
+    pushl %fs
+    pushl %gs
+    
+    # Load kernel data segments
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    
+    # Call C exception handler
+    # Stack layout: [gs] [fs] [es] [ds] [edi] [esi] [ebp] [esp] [ebx] [edx] [ecx] [eax] [err] [vector]
+    # Vector is at [esp + 48], error code at [esp + 44]
+    movl 48(%esp), %eax  # Get vector number
+    movl 44(%esp), %edx  # Get error code
+    pushl %edx           # Push error code
+    pushl %eax           # Push vector
+    call exception_handler
+    addl $8, %esp
+    
+    # Restore segment registers
+    popl %gs
+    popl %fs
+    popl %es
+    popl %ds
+    
+    # Restore all registers
+    popa
+    
+    # Remove error code and interrupt number
+    addl $8, %esp
+    
+    # Return from interrupt
+    iret
+
+# Common IRQ handler stub
+irq_common_stub:
+    # Save all registers
+    pusha
+    
+    # Save segment registers
+    pushl %ds
+    pushl %es
+    pushl %fs
+    pushl %gs
+    
+    # Load kernel data segments
+    movw $0x10, %ax
+    movw %ax, %ds
+    movw %ax, %es
+    movw %ax, %fs
+    movw %ax, %gs
+    
+    # Call C IRQ handler
+    # Stack layout: [gs] [fs] [es] [ds] [edi] [esi] [ebp] [esp] [ebx] [edx] [ecx] [eax] [err] [irq]
+    # IRQ number is at [esp + 48] (48 = 16 bytes for pusha + 16 bytes for segment regs + 16 bytes for err/irq)
+    movl 48(%esp), %eax  # Get IRQ number from stack
+    pushl %eax           # Push IRQ number as argument
+    call irq_handler
+    addl $4, %esp        # Remove argument
+    
+    # Restore segment registers
+    popl %gs
+    popl %fs
+    popl %es
+    popl %ds
+    
+    # Restore all registers
+    popa
+    
+    # Remove error code and IRQ number
+    addl $8, %esp
+    
+    # Return from interrupt
+    iret
+
+
+# Load IDT function
+idt_flush:
+    movl 4(%esp), %eax  # Get IDT pointer from stack
+    lidt (%eax)
+    ret
 
 # Serial message used by early kernel trace
 .align 1
 serial_msg:
     .ascii "KERNEL PM\n\0"
 
-# GDT
+# GDT (if needed, but loader already sets this up)
 .align 8
 gdt:
     .quad 0x0000000000000000     # Null descriptor
@@ -203,9 +319,3 @@ gdt:
 gdt_ptr:
     .word (3*8 - 1)
     .long gdt
-
-# ISR stub
-.section .text
-.align 16
-isr_stub:
-    iret

@@ -1,6 +1,7 @@
 #include "command.h"
 #include "terminal.h"
 #include "filesystem.h"
+#include "interrupt.h"
 
 extern Terminal terminal;
 extern FileSystem filesystem;
@@ -60,7 +61,7 @@ void CommandSystem::execute_command()
         cmd_clear();
     } else if (strcmp(current_command.name, "echo") == 0) {
         cmd_echo();
-    } else if (strcmp(current_command.name, "mkdir") == 0) {
+    } else if (strcmp(current_command.name, "makedir") == 0) {
         if (current_command.arg_count >= 1) {
             cmd_mkdir(current_command.args[0]);
         }
@@ -68,11 +69,11 @@ void CommandSystem::execute_command()
         if (current_command.arg_count >= 1) {
             cmd_cd(current_command.args[0]);
         }
-    } else if (strcmp(current_command.name, "ls") == 0) {
+    } else if (strcmp(current_command.name, "lsd") == 0) {
         cmd_ls();
     } else if (strcmp(current_command.name, "pwd") == 0) {
         cmd_pwd();
-    } else if (strcmp(current_command.name, "touch") == 0) {
+    } else if (strcmp(current_command.name, "makefile") == 0) {
         if (current_command.arg_count >= 1) {
             cmd_touch(current_command.args[0]);
         }
@@ -96,6 +97,26 @@ void CommandSystem::execute_command()
             content[pos] = '\0';
             cmd_write(current_command.args[0], content);
         }
+    } else if (strcmp(current_command.name, "remove") == 0) {
+        if (current_command.arg_count >= 1) {
+            cmd_remove(current_command.args[0]);
+        } else {
+            terminal.write("Usage: remove <filename>\n");
+        }
+    } else if (strcmp(current_command.name, "move") == 0) {
+        if (current_command.arg_count >= 2) {
+            cmd_move(current_command.args[0], current_command.args[1]);
+        } else {
+            terminal.write("Usage: move <source> <destination>\n");
+        }
+    } else if (strcmp(current_command.name, "copy") == 0) {
+        if (current_command.arg_count >= 2) {
+            cmd_copy(current_command.args[0], current_command.args[1]);
+        } else {
+            terminal.write("Usage: copy <source> <destination>\n");
+        }
+    } else if (strcmp(current_command.name, "shutdown") == 0) {
+        cmd_shutdown();
     } else {
         terminal.write("Unknown command: ");
         terminal.write(current_command.name);
@@ -159,7 +180,19 @@ void CommandSystem::clear_command(Command& cmd)
 
 // Stub implementations
 void CommandSystem::cmd_help() {
-    terminal.write("Available commands: help, clear, echo, mkdir, cd, ls, pwd, touch, cat, write\n");
+    terminal.write("Available commands:\n");
+    terminal.write("  help, clear, echo\n");
+    terminal.write("  makedir - Create directory\n");
+    terminal.write("  cd - Change directory\n");
+    terminal.write("  lsd - List directory\n");
+    terminal.write("  pwd - Print working directory\n");
+    terminal.write("  makefile - Create file\n");
+    terminal.write("  cat - Display file contents\n");
+    terminal.write("  write - Write to file\n");
+    terminal.write("  remove - Remove file or empty directory\n");
+    terminal.write("  move - Move/rename file or directory\n");
+    terminal.write("  copy - Copy file\n");
+    terminal.write("  shutdown - Shutdown the system\n");
 }
 
 void CommandSystem::cmd_clear() {
@@ -177,7 +210,15 @@ void CommandSystem::cmd_echo() {
 }
 
 void CommandSystem::cmd_mkdir(const char* name) {
-    filesystem.mkdir(name);
+    if (filesystem.mkdir(name)) {
+        terminal.write("Directory created: ");
+        terminal.write(name);
+        terminal.write("\n");
+    } else {
+        terminal.write("Error: could not create directory ");
+        terminal.write(name);
+        terminal.write("\n");
+    }
 }
 
 void CommandSystem::cmd_cd(const char* path) {
@@ -193,7 +234,15 @@ void CommandSystem::cmd_pwd() {
 }
 
 void CommandSystem::cmd_touch(const char* name) {
-    filesystem.create_file(name, "");
+    if (filesystem.create_file(name, "")) {
+        terminal.write("File created: ");
+        terminal.write(name);
+        terminal.write("\n");
+    } else {
+        terminal.write("Error: could not create file ");
+        terminal.write(name);
+        terminal.write("\n");
+    }
 }
 
 void CommandSystem::cmd_cat(const char* name) {
@@ -206,6 +255,77 @@ void CommandSystem::cmd_cat(const char* name) {
 
 void CommandSystem::cmd_write(const char* name, const char* content) {
     filesystem.write_file(name, content);
+}
+
+void CommandSystem::cmd_remove(const char* name) {
+    if (filesystem.remove(name)) {
+        terminal.write("Removed: ");
+        terminal.write(name);
+        terminal.write("\n");
+    } else {
+        terminal.write("Error: could not remove ");
+        terminal.write(name);
+        terminal.write("\n");
+    }
+}
+
+void CommandSystem::cmd_move(const char* src, const char* dest) {
+    if (filesystem.move(src, dest)) {
+        terminal.write("Moved: ");
+        terminal.write(src);
+        terminal.write(" -> ");
+        terminal.write(dest);
+        terminal.write("\n");
+    } else {
+        terminal.write("Error: could not move ");
+        terminal.write(src);
+        terminal.write(" to ");
+        terminal.write(dest);
+        terminal.write("\n");
+    }
+}
+
+void CommandSystem::cmd_copy(const char* src, const char* dest) {
+    if (filesystem.copy_file(src, dest)) {
+        terminal.write("Copied: ");
+        terminal.write(src);
+        terminal.write(" -> ");
+        terminal.write(dest);
+        terminal.write("\n");
+    } else {
+        terminal.write("Error: could not copy ");
+        terminal.write(src);
+        terminal.write(" to ");
+        terminal.write(dest);
+        terminal.write("\n");
+    }
+}
+
+void CommandSystem::cmd_shutdown() {
+    terminal.write("Shutting down RusticOS...\n");
+    terminal.write("System halted.\n");
+    
+    // Disable interrupts
+    disable_interrupts();
+    
+    // Method 1: Try QEMU isa-debug-exit device (port 0xf4)
+    // Exit code 0x31 = 49 (non-zero exit code for QEMU)
+    asm volatile("outl %0, %1" : : "a"((uint32_t)0x31), "Nd"((uint16_t)0xf4));
+    
+    // Small delay to allow exit to process
+    for (volatile int i = 0; i < 10000; i++);
+    
+    // Method 2: Try ACPI shutdown (port 0x604)
+    // Write 0x2000 to ACPI PM1a_CNT register to trigger shutdown
+    asm volatile("outw %0, %1" : : "a"((uint16_t)0x2000), "Nd"((uint16_t)0x604));
+    
+    // Small delay to allow shutdown to process
+    for (volatile int i = 0; i < 10000; i++);
+    
+    // If neither worked, halt the CPU (fallback)
+    for (;;) {
+        asm volatile("cli; hlt");
+    }
 }
 
 CommandSystem command_system;

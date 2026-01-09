@@ -126,8 +126,63 @@ void FileSystem::ls() {
 }
 
 bool FileSystem::pwd() {
-    if (!current_dir) return false;
-    terminal.write("/\n");
+    if (!current_dir || !root) return false;
+    
+    // If we're at root, just return "/"
+    if (current_dir == root) {
+        terminal.write("/\n");
+        return true;
+    }
+    
+    // Build path by traversing from current_dir up to root
+    // Store directory names in reverse order, then reverse them
+    char dir_names[32][MAX_NAME_LENGTH];
+    uint32_t dir_count = 0;
+    
+    FileNode* node = current_dir;
+    
+    // Collect directory names from current to root (excluding root)
+    while (node && node != root && dir_count < 32) {
+        uint32_t name_len = strlen(node->name);
+        if (name_len > 0 && name_len < MAX_NAME_LENGTH) {
+            // Copy directory name (including null terminator)
+            strncpy(dir_names[dir_count], node->name, MAX_NAME_LENGTH - 1);
+            dir_names[dir_count][MAX_NAME_LENGTH - 1] = '\0';
+            dir_count++;
+        }
+        node = node->parent;
+    }
+    
+    // Build the path string by reversing the directory names
+    char path[MAX_PATH_LENGTH] = {0};
+    uint32_t path_pos = 0;
+    
+    path[path_pos++] = '/';  // Always start with "/"
+    
+    // Add directories in reverse order (from root to current)
+    for (int i = dir_count - 1; i >= 0; i--) {
+        uint32_t name_len = strlen(dir_names[i]);
+        
+        // Check if we have space
+        if (path_pos + name_len + 1 >= MAX_PATH_LENGTH) {
+            break;
+        }
+        
+        // Add directory name
+        for (uint32_t j = 0; j < name_len; j++) {
+            path[path_pos++] = dir_names[i][j];
+        }
+        
+        // Add trailing slash if not last directory
+        if (i > 0) {
+            path[path_pos++] = '/';
+        }
+    }
+    
+    path[path_pos] = '\0';
+    
+    terminal.write(path);
+    terminal.write("\n");
     return true;
 }
 
@@ -219,6 +274,97 @@ bool FileSystem::write_file(const char* name, const char* content) {
     file->data[file->data_capacity - 1] = '\0';
     file->size = content_len;
     return true;
+}
+
+bool FileSystem::remove(const char* name) {
+    if (!name || !current_dir) return false;
+    
+    FileNode* node = find_child(current_dir, name);
+    if (!node) return false;
+    
+    // If it's a directory, check if it's empty
+    if (node->type == FILE_TYPE_DIRECTORY) {
+        if (node->child_count > 0) {
+            terminal.write("Error: directory not empty\n");
+            return false;
+        }
+        return rmdir(name);
+    } else {
+        // It's a file
+        return delete_file(name);
+    }
+}
+
+bool FileSystem::move(const char* src, const char* dest) {
+    if (!src || !dest || !current_dir) return false;
+    
+    // Check if source exists
+    FileNode* src_node = find_child(current_dir, src);
+    if (!src_node) {
+        terminal.write("Error: source not found\n");
+        return false;
+    }
+    
+    // Check if destination already exists
+    if (find_child(current_dir, dest)) {
+        terminal.write("Error: destination already exists\n");
+        return false;
+    }
+    
+    // Check if we have space
+    if (current_dir->child_count >= MAX_DIRECTORY_ENTRIES) {
+        terminal.write("Error: directory full\n");
+        return false;
+    }
+    
+    // Simply rename: update the name field
+    strncpy(src_node->name, dest, MAX_NAME_LENGTH - 1);
+    src_node->name[MAX_NAME_LENGTH - 1] = '\0';
+    
+    return true;
+}
+
+bool FileSystem::copy_file(const char* src, const char* dest) {
+    if (!src || !dest || !current_dir) return false;
+    
+    // Check if source exists and is a file
+    FileNode* src_file = find_child(current_dir, src);
+    if (!src_file || src_file->type != FILE_TYPE_FILE) {
+        terminal.write("Error: source file not found\n");
+        return false;
+    }
+    
+    // Check if destination already exists
+    if (find_child(current_dir, dest)) {
+        terminal.write("Error: destination already exists\n");
+        return false;
+    }
+    
+    // Check if we have space
+    if (current_dir->child_count >= MAX_DIRECTORY_ENTRIES) {
+        terminal.write("Error: directory full\n");
+        return false;
+    }
+    
+    // Create new file with the same content
+    const char* content = src_file->data ? src_file->data : "";
+    if (create_file(dest, content)) {
+        // If source file has data, copy it
+        if (src_file->data && src_file->size > 0) {
+            FileNode* dest_file = find_child(current_dir, dest);
+            if (dest_file) {
+                // Allocate and copy data
+                dest_file->data_capacity = src_file->size + 1;
+                dest_file->data = new char[dest_file->data_capacity];
+                strncpy(dest_file->data, src_file->data, src_file->size);
+                dest_file->data[src_file->size] = '\0';
+                dest_file->size = src_file->size;
+            }
+        }
+        return true;
+    }
+    
+    return false;
 }
 
 void FileSystem::save_to_disk() {

@@ -44,6 +44,10 @@ public:
     void cmd_touch(const char* name);
     void cmd_cat(const char* name);
     void cmd_write(const char* name, const char* content);
+    void cmd_remove(const char* name);
+    void cmd_move(const char* src, const char* dest);
+    void cmd_copy(const char* src, const char* dest);
+    void cmd_shutdown();
 };
 
 extern CommandSystem command_system;

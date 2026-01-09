@@ -20,6 +20,7 @@ start:
     ; Print debug message
     mov si, msg_start
     call print_string
+    call delay
 
     ; Save boot drive number from BIOS
     mov [boot_drive], dl
@@ -27,6 +28,7 @@ start:
     ; Print debug message before loading
     mov si, msg_loading
     call print_string
+    call delay
 
     ; === Load loader using simple CHS read ===
     ; First, recalibrate the drive
@@ -53,6 +55,7 @@ start:
     ; Print success message
     mov si, msg_success
     call print_string
+    call delay
 
     ; Reset DS to be safe
     xor ax, ax
@@ -83,6 +86,29 @@ print_string:
     int 0x10
     jmp .ps_loop
 .ps_done:
+    ret
+
+; Delay function - provides a visible delay for messages
+; Approximately 2-3 seconds on typical systems
+delay:
+    push ax
+    push cx
+    push dx
+    mov ax, 0x0040      ; Outer loop counter (64 iterations)
+.delay_outer:
+    mov cx, 0xFFFF      ; Middle loop counter (65535 iterations)
+.delay_middle:
+    mov dx, 0x00FF      ; Inner loop counter (255 iterations)
+.delay_inner:
+    dec dx
+    jnz .delay_inner
+    dec cx
+    jnz .delay_middle
+    dec ax
+    jnz .delay_outer
+    pop dx
+    pop cx
+    pop ax
     ret
 
 msg_loading:        db "[BOOT] Loading kernel loader...", 0x0D, 0x0A, 0

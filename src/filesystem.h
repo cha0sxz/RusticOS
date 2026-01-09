@@ -54,6 +54,11 @@ public:
     bool read_file(const char* name, char* buffer, uint32_t max_size);
     bool write_file(const char* name, const char* content);
     
+    // File operations
+    bool remove(const char* name);  // Remove file or empty directory
+    bool move(const char* src, const char* dest);  // Move/rename file or directory
+    bool copy_file(const char* src, const char* dest);  // Copy file
+    
     void save_to_disk();
     bool load_from_disk();
     

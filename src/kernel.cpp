@@ -1,14 +1,24 @@
 /*
+ * ============================================================================
  * RusticOS Kernel Main Module
+ * ============================================================================
  * 
- * This module handles:
- * - Hardware initialization (serial, VGA, keyboard)
- * - Kernel startup and main event loop
- * - Command-line interface integration
- * - Keyboard input polling and processing
+ * This is the main kernel entry point and event loop for RusticOS.
  * 
- * The kernel runs in protected mode with no interrupts (polling-based).
- * All hardware access is done via direct I/O port operations.
+ * Responsibilities:
+ *   - Hardware initialization (VGA display, serial port, keyboard, interrupts)
+ *   - System startup sequence and initialization
+ *   - Main event loop with interrupt-driven keyboard input
+ *   - Integration with command-line interface and filesystem
+ * 
+ * Architecture:
+ *   - Runs in 32-bit protected mode
+ *   - Uses interrupt-driven I/O (keyboard via IRQ1)
+ *   - Timer interrupt (IRQ0) available for future scheduling
+ *   - All hardware access via direct I/O port operations
+ * 
+ * Version: 1.0.1
+ * ============================================================================
  */
 
 #include "terminal.h"
@@ -276,14 +286,23 @@ static char scancode_to_char(uint8_t scan_code) {
 }
 
 /**
- * Poll keyboard for input and process any keypresses
+ * ============================================================================
+ * Poll Keyboard (Legacy Function - Now Unused)
+ * ============================================================================
  * 
- * This function:
- * - Checks if keyboard has data available
- * - Reads ALL available scan codes from the keyboard buffer
- * - Converts scan codes to ASCII
- * - Sends input to the command system
- * - Executes commands when user presses Enter
+ * NOTE: This function is deprecated. Keyboard input is now handled via
+ * interrupts (IRQ1). The interrupt handler processes scan codes and fills
+ * a buffer, which is read in the main event loop.
+ * 
+ * This function is kept for reference but is no longer called in the
+ * interrupt-driven kernel.
+ * ============================================================================
+ * 
+ * Legacy behavior:
+ * - Polled keyboard status port for available data
+ * - Read scan codes directly from keyboard port
+ * - Converted scan codes to ASCII
+ * - Processed input in real-time
  * 
  * @return true if at least one key was processed, false if no key available
  */
@@ -341,13 +360,23 @@ static void serial_write(const char* str) {
 }
 
 /**
- * Initialize serial port (COM1) for debugging output
+ * ============================================================================
+ * Initialize Serial Port (COM1)
+ * ============================================================================
+ * 
+ * Configures COM1 (serial port) for debugging output at 115200 baud.
+ * Serial output appears on COM1 and can be captured via QEMU's -serial option.
  * 
  * Configuration:
- * - Baud rate: 115200
- * - Data bits: 8
- * - Parity: None
- * - Stop bits: 1
+ *   - Port: COM1 (0x3F8)
+ *   - Baud rate: 115200 (divisor = 1)
+ *   - Data bits: 8
+ *   - Parity: None
+ *   - Stop bits: 1
+ *   - FIFO: Enabled (14-byte threshold)
+ * 
+ * All kernel initialization messages are sent here for debugging.
+ * ============================================================================
  */
 static void init_serial() {
     outb(SERIAL_IER, 0x00);        // Disable all interrupts
@@ -359,15 +388,28 @@ static void init_serial() {
 }
 
 /**
- * Initialize VGA text mode display for QEMU compatibility
+ * ============================================================================
+ * Initialize VGA Text Mode Display
+ * ============================================================================
  * 
- * CRITICAL: Must write to VGA memory FIRST to trigger QEMU display init.
- * Then we can safely access VGA control registers.
+ * Initializes VGA text mode (80x25 characters) for display output.
+ * This function is CRITICAL for QEMU compatibility.
  * 
- * Steps:
- * 1. Fill VGA buffer with spaces (triggers display init)
- * 2. Access VGA control registers to confirm display is active
- * 3. Set initial cursor position
+ * IMPORTANT: Must write to VGA memory buffer FIRST before accessing
+ * any VGA control registers. This triggers QEMU's display initialization.
+ * 
+ * Initialization Steps:
+ *   1. Fill entire VGA buffer (80x25 = 2000 characters) with spaces
+ *      This ensures the display is initialized and visible
+ *   2. Wait for hardware to stabilize (delay loop)
+ *   3. Access VGA status register to confirm display is active
+ *   4. Set initial cursor position to (0, 0) via CRTC registers
+ * 
+ * VGA Memory Layout:
+ *   - Buffer address: 0xB8000 (linear address)
+ *   - Each character: 2 bytes (character byte + attribute byte)
+ *   - Attribute format: (BG << 4) | FG
+ * ============================================================================
  */
 static void init_vga() {
     volatile uint16_t* vga = VGA_BUFFER;
@@ -445,10 +487,23 @@ static bool wait_kbd_data() {
 }
 
 /**
- * Initialize PS/2 keyboard controller
+ * ============================================================================
+ * Initialize PS/2 Keyboard Controller
+ * ============================================================================
  * 
- * Simply clears the keyboard buffer and ensures keyboard is enabled.
- * We don't force a specific scan code set since our code handles both set 1 and set 2.
+ * Initializes and clears the PS/2 keyboard controller to ensure a clean state.
+ * This function clears any stale scan codes that might be in the keyboard buffer
+ * from boot-time key presses.
+ * 
+ * Initialization Steps:
+ *   1. Wait for keyboard controller to be ready
+ *   2. Clear keyboard buffer (read and discard up to 10 pending bytes)
+ *   3. Reset internal shift state tracking variables
+ * 
+ * Note: We don't force a specific scan code set since our driver handles
+ * both scan code set 1 (standard) and set 2 (modern keyboards).
+ * The keyboard interrupt handler (IRQ1) processes all scan codes.
+ * ============================================================================
  */
 static void init_keyboard() {
     // Wait for keyboard controller to be ready
@@ -476,67 +531,100 @@ static void init_keyboard() {
  * ============================================================================ */
 
 /**
- * Kernel main entry point
+ * ============================================================================
+ * Kernel Main Entry Point
+ * ============================================================================
  * 
- * Initialization sequence:
- * 1. Serial port setup for debugging
- * 2. VGA display initialization
- * 3. Terminal display setup
- * 4. Welcome messages display
- * 5. Command prompt display
- * 6. Keyboard controller setup
- * 7. Main event loop (keyboard polling)
+ * This is the main entry point called by the loader after entering protected mode.
+ * It performs all system initialization and then enters the main event loop.
  * 
- * NOTE: The kernel runs in protected mode with no interrupts.
- * All I/O is polling-based.
+ * Initialization Sequence:
+ *   1. Initialize serial port (COM1) for debug output
+ *   2. Initialize VGA text mode display
+ *   3. Set up terminal interface and display welcome screen
+ *   4. Initialize interrupt handling (PIC, IDT)
+ *   5. Initialize keyboard driver and clear buffer
+ *   6. Enable interrupts (STI)
+ *   7. Enter main event loop (interrupt-driven)
+ * 
+ * The kernel runs in 32-bit protected mode with interrupts enabled.
+ * Hardware I/O is interrupt-driven (keyboard via IRQ1, timer via IRQ0).
+ * ============================================================================
  */
 extern "C" void kernel_main() {
-    // Initialize serial port for debug output
+    // ========================================================================
+    // Phase 1: Serial Port Initialization
+    // ========================================================================
+    // Initialize serial port for debugging output (COM1, 115200 baud)
+    // All initialization messages are sent to serial for debugging purposes
     init_serial();
-    serial_write("===== KERNEL STARTED =====\n");
+    serial_write("===== RusticOS Kernel Starting (v1.0.1) =====\n");
     
-    // Initialize VGA display (CRITICAL: write buffer before register access)
-    serial_write("Initializing VGA display...\n");
+    // ========================================================================
+    // Phase 2: VGA Display Initialization
+    // ========================================================================
+    // Initialize VGA text mode (80x25 characters)
+    // CRITICAL: Must write to VGA buffer BEFORE accessing control registers
+    // This triggers QEMU/VGA hardware initialization
+    serial_write("Initializing VGA text mode display...\n");
     init_vga();
     
-    // Clear screen and set up welcome screen using terminal
-    // (clear() will automatically draw the title bar)
-    serial_write("Setting up welcome screen...\n");
+    // ========================================================================
+    // Phase 3: Terminal Setup
+    // ========================================================================
+    // Set up the terminal interface and display welcome screen
+    // The clear() function automatically redraws the title bar with version info
+    serial_write("Setting up terminal interface...\n");
     terminal.clear();
     
-    // Write welcome text
+    // Display welcome message and instructions
     terminal.setColor(GREEN, BLACK);
-    terminal.writeAt("Welcome to RusticOS!", 0, 2);
+    terminal.writeAt("Welcome to RusticOS v1.0.1!", 0, 2);
     terminal.writeAt("Type 'help' for available commands.", 0, 3);
     terminal.writeAt("Root filesystem mounted at '/'", 0, 4);
     
-    // Write command prompt
+    // Display initial command prompt
     terminal.writeAt("> ", 0, 5);
-    terminal.setCursor(2, 5);  // Position cursor after "> "
+    terminal.setCursor(2, 5);  // Position cursor after "> " prompt
+    serial_write("Terminal interface ready.\n");
     
-    serial_write("Display ready.\n");
+    // ========================================================================
+    // Phase 4: Interrupt System Initialization
+    // ========================================================================
+    // Set up interrupt handling for hardware devices
+    serial_write("Initializing interrupt handling system...\n");
+    init_pic();              // Initialize Programmable Interrupt Controller (remap IRQs)
+    // Note: IDT is already initialized in crt0.s via init_idt() call
     
-    // Initialize interrupt handling
-    serial_write("Initializing interrupts...\n");
-    init_pic();              // Initialize Programmable Interrupt Controller
-    // IDT already initialized in crt0.s via init_idt() call
+    // ========================================================================
+    // Phase 5: Keyboard Driver Initialization
+    // ========================================================================
+    // Initialize keyboard driver and clear any stale scan codes
+    serial_write("Initializing keyboard driver...\n");
+    keyboard.init();         // Initialize keyboard driver internal state
+    init_keyboard();         // Clear keyboard buffer and reset controller state
     
-    // Initialize keyboard controller
-    serial_write("Initializing keyboard...\n");
-    keyboard.init();         // Initialize keyboard driver
-    init_keyboard();         // Clear keyboard buffer
-    
-    // Enable interrupts
+    // ========================================================================
+    // Phase 6: Enable Interrupts and Start System
+    // ========================================================================
+    // Enable interrupts (STI) - system is now fully operational
     serial_write("Enabling interrupts...\n");
     enable_interrupts();
-    serial_write("===== KERNEL READY (Interrupt-driven) =====\n");
+    serial_write("===== RusticOS Kernel Ready (Interrupt-driven) =====\n");
     
-    // Main kernel event loop - check keyboard buffer (interrupt-driven)
+    // ========================================================================
+    // Main Kernel Event Loop
+    // ========================================================================
+    // This loop processes keyboard events from the interrupt-driven buffer.
+    // The keyboard interrupt handler (IRQ1) fills the buffer, and this loop
+    // processes events and executes commands. This is much more efficient
+    // than polling the keyboard port directly.
+    // ========================================================================
     while (true) {
         // Check for keyboard events (filled by interrupt handler)
         KeyEvent event;
         if (keyboard.get_key_event(event)) {
-            // Process the key event
+            // Process the key event if it contains a valid ASCII character
             if (event.ascii != 0) {
                 // Send the input character to the command system for processing
                 command_system.process_input(event.ascii);
@@ -550,8 +638,9 @@ extern "C" void kernel_main() {
             }
         }
         
-        // Small delay to prevent excessive CPU usage when no events
-        // This is much more efficient than polling the keyboard port
-        for (volatile int i = 0; i < 1000; i++);  // Reduced delay since interrupts handle I/O
+        // Small delay to prevent excessive CPU usage when no events are pending
+        // This allows the CPU to enter a lower power state between events
+        // Much more efficient than the previous polling approach
+        for (volatile int i = 0; i < 500; i++);  // Reduced delay: interrupts handle I/O efficiently
     }
 }

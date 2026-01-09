@@ -1,19 +1,27 @@
+/*
+ * ============================================================================
+ * RusticOS Terminal Interface Header (terminal.h)
+ * ============================================================================
+ * 
+ * Defines the VGA text-mode terminal interface for RusticOS.
+ * Provides a high-level abstraction over VGA hardware for console output.
+ * 
+ * Features:
+ *   - VGA text mode (80x25 characters) with color support
+ *   - Cursor management and positioning
+ *   - Text output with scrolling support
+ *   - Color attributes for foreground and background
+ *   - Title bar with version information (always displayed)
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
-// Ensure fixed-width integer types are available in this freestanding build
 #include "types.h"
-
 #include "keyboard.h"
-
-/*
- * Terminal (text-mode) interface for RusticOS
- * -------------------------------------------
- * - Provides a simple, buffered VGA text-mode console
- * - Supports writing strings, cursor positioning, scrolling, and a basic
- *   interactive input mode
- * - Intended for educational use; not optimized
- */
 
 // VGA color palette (foreground/background attributes)
 enum TerminalColor {

@@ -1,68 +1,144 @@
+/*
+ * ============================================================================
+ * RusticOS Filesystem Implementation (filesystem.cpp)
+ * ============================================================================
+ * 
+ * Implements the in-memory hierarchical filesystem for RusticOS.
+ * Provides file and directory operations including creation, deletion,
+ * navigation, reading, and writing.
+ * 
+ * The filesystem uses dynamic memory allocation for nodes and file data.
+ * All operations work on the in-memory tree structure.
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #include "filesystem.h"
 #include "terminal.h"
 
 extern Terminal terminal;
 
+/**
+ * FileSystem Constructor
+ * 
+ * Initializes the filesystem by creating the root directory ("/").
+ * The root directory has no name and no parent (it is its own parent conceptually).
+ * Sets the current working directory to root.
+ */
 FileSystem::FileSystem() : root(nullptr), current_dir(nullptr) {
+    // Create root directory node
     root = new FileNode();
-    root->name[0] = '\0';
+    root->name[0] = '\0';              // Root has empty name
     root->type = FILE_TYPE_DIRECTORY;
     root->is_directory = true;
-    root->child_count = 0;
+    root->child_count = 0;             // Root starts empty
     root->size = 0;
-    root->data = nullptr;
-    root->parent = nullptr;
-    current_dir = root;
+    root->data = nullptr;              // Directories don't have data
+    root->parent = nullptr;            // Root has no parent
+    current_dir = root;                // Start in root directory
 }
 
+/**
+ * FileSystem Destructor
+ * 
+ * Cleans up all filesystem nodes by recursively freeing the entire tree.
+ * This deallocates all memory used by the filesystem.
+ */
 FileSystem::~FileSystem() {
     if (root) {
-        free_node(root);
+        free_node(root);  // Recursively free entire tree starting from root
     }
 }
 
+/**
+ * Free Node (Recursive Helper)
+ * 
+ * Recursively frees a node and all its children. Used for cleanup.
+ * 
+ * @param node Pointer to node to free (can be null for safety)
+ */
 void FileSystem::free_node(FileNode* node) {
-    if (!node) return;
+    if (!node) return;  // Safety check: null pointer
+    
+    // Recursively free all children first
     for (uint32_t i = 0; i < node->child_count; ++i) {
         free_node(node->children[i]);
     }
+    
+    // Free file data if this is a file
     if (node->data) {
         delete[] node->data;
     }
+    
+    // Free the node itself
     delete node;
 }
 
+/**
+ * Find Child Node
+ * 
+ * Searches for a child node with the given name in a parent directory.
+ * 
+ * @param parent Parent directory to search in
+ * @param name Name of child to find (null-terminated string)
+ * @return Pointer to child node if found, nullptr otherwise
+ */
 FileNode* FileSystem::find_child(FileNode* parent, const char* name) {
-    if (!parent || !name) return nullptr;
+    if (!parent || !name) return nullptr;  // Safety check
+    
+    // Linear search through children array
     for (uint32_t i = 0; i < parent->child_count; ++i) {
         if (strcmp(parent->children[i]->name, name) == 0) {
-            return parent->children[i];
+            return parent->children[i];  // Found!
         }
     }
-    return nullptr;
+    return nullptr;  // Not found
 }
 
+/**
+ * Create Directory
+ * 
+ * Creates a new directory in the current working directory.
+ * 
+ * @param name Name of the directory to create (must be unique in current directory)
+ * @return true if directory created successfully, false on error
+ * 
+ * Error conditions:
+ *   - Invalid name (null pointer or empty)
+ *   - Directory full (MAX_DIRECTORY_ENTRIES reached)
+ *   - Name already exists
+ */
 bool FileSystem::mkdir(const char* name) {
-    if (!name || !current_dir || current_dir->child_count >= MAX_DIRECTORY_ENTRIES) {
-        return false;
+    // Validate inputs
+    if (!name || !current_dir) {
+        return false;  // Invalid parameters
     }
     
+    // Check if directory is full
+    if (current_dir->child_count >= MAX_DIRECTORY_ENTRIES) {
+        return false;  // Directory full
+    }
+    
+    // Check if name already exists
     if (find_child(current_dir, name)) {
-        return false; // Already exists
+        return false;  // Name already exists
     }
     
+    // Create new directory node
     FileNode* new_dir = new FileNode();
-    strncpy(new_dir->name, name, MAX_NAME_LENGTH - 1);
-    new_dir->name[MAX_NAME_LENGTH - 1] = '\0';
+    strncpy(new_dir->name, name, MAX_NAME_LENGTH - 1);  // Copy name with safety
+    new_dir->name[MAX_NAME_LENGTH - 1] = '\0';          // Ensure null termination
     new_dir->type = FILE_TYPE_DIRECTORY;
     new_dir->is_directory = true;
-    new_dir->child_count = 0;
+    new_dir->child_count = 0;           // New directory starts empty
     new_dir->size = 0;
-    new_dir->data = nullptr;
-    new_dir->parent = current_dir;
+    new_dir->data = nullptr;            // Directories don't have data
+    new_dir->parent = current_dir;      // Set parent pointer
     
+    // Add to parent's children array
     current_dir->children[current_dir->child_count++] = new_dir;
-    return true;
+    return true;  // Success!
 }
 
 bool FileSystem::rmdir(const char* name) {

@@ -1,7 +1,19 @@
 # ============================================================================
-# RusticOS - 32-bit Startup (crt0)
-# ----------------------------------------------------------------------------
-# Minimal and robust 32-bit startup with interrupt handling
+# RusticOS - 32-bit Kernel Startup (crt0.s)
+# ============================================================================
+# 
+# This file contains the kernel entry point and interrupt handling setup.
+# It is the first code executed after the loader transfers control to the kernel.
+#
+# Responsibilities:
+#   - Set up kernel stack
+#   - Initialize Interrupt Descriptor Table (IDT)
+#   - Set up interrupt service routines (ISRs) for exceptions and IRQs
+#   - Load IDT and enable interrupt handling infrastructure
+#   - Call global constructors and initialization arrays
+#   - Transfer control to kernel_main() (C++ entry point)
+#
+# Version: 1.0.1
 # ============================================================================
 
 .global _start
@@ -14,20 +26,38 @@
 .section .text
 .code32
 
+# ============================================================================
+# Kernel Entry Point (_start)
+# ============================================================================
+# This is the first instruction executed after the loader jumps to the kernel.
+# The loader has already:
+#   - Switched to 32-bit protected mode
+#   - Loaded the GDT (Global Descriptor Table)
+#   - Set up segment selectors
+#   - Loaded the kernel code to address 0x00001000
+# ============================================================================
 _start:
+    # Disable interrupts during kernel initialization
     cli
     
-    # Debug: write 'R' to VGA to confirm kernel entry
+    # Debug marker: Write 'R' to VGA buffer to confirm kernel entry
+    # This helps verify the kernel loaded correctly during development
     movl $0xb8000, %edi
-    movl $0x1f52, %eax   # R in white
+    movl $0x1f52, %eax   # 'R' character (0x52) with white text (0x1F attribute)
     movl %eax, (%edi)
     
-    # GDT already loaded by loader, segment registers already set
-    # Just verify we're in protected mode and continue
+    # GDT (Global Descriptor Table) already loaded by loader
+    # Segment registers already set up by loader in protected mode
+    # We're already in 32-bit protected mode, so we can proceed
 
-    # Stack: use 0x00090000 (kernel at 0x00090000, stack below it)
+    # ========================================================================
+    # Set Up Kernel Stack
+    # ========================================================================
+    # Stack grows downward from high addresses to low addresses
+    # Kernel code is loaded at 0x00001000, so we place the stack below it
+    # Stack pointer: 0x00088000 (gives us plenty of stack space)
     movl $0x00088000, %esp
-    andl $~0xF, %esp          # align to 16 bytes
+    andl $~0xF, %esp          # Align stack to 16-byte boundary (required by ABI)
 
     # movl $0xb800A, %edi
     # movl $0x1f42, %eax   # B in green

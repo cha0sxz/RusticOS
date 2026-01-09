@@ -1,6 +1,26 @@
+/*
+ * ============================================================================
+ * RusticOS Keyboard Driver Implementation (keyboard.cpp)
+ * ============================================================================
+ * 
+ * Implements the PS/2 keyboard driver with interrupt-driven input handling.
+ * Converts scan codes to ASCII characters and maintains modifier key state.
+ * 
+ * Features:
+ *   - Scan code to ASCII conversion (US QWERTY layout)
+ *   - Support for both scan code set 1 and set 2
+ *   - Modifier key state tracking (Shift, Ctrl, Alt)
+ *   - Circular event buffer for key events
+ *   - Real-time key state tracking
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #include "keyboard.h"
 
-// Internal key state table (raw pressed/released)
+// Internal key state table - tracks which keys are currently pressed
+// Used for modifier key tracking and key state queries
 static bool key_state[256];
 
 KeyboardDriver::KeyboardDriver()

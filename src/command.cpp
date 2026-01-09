@@ -1,3 +1,22 @@
+/*
+ * ============================================================================
+ * RusticOS Command System Implementation (command.cpp)
+ * ============================================================================
+ * 
+ * Implements the command-line interface for RusticOS. Handles command parsing,
+ * input processing, and command execution. All user commands are processed here.
+ * 
+ * Supported Commands:
+ *   - help, clear, echo
+ *   - makedir, cd, lsd, pwd
+ *   - makefile, cat, write
+ *   - remove, move, copy
+ *   - shutdown
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #include "command.h"
 #include "terminal.h"
 #include "filesystem.h"

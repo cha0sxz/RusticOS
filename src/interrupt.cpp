@@ -1,3 +1,22 @@
+/*
+ * ============================================================================
+ * RusticOS Interrupt Handling Implementation (interrupt.cpp)
+ * ============================================================================
+ * 
+ * Implements interrupt handling infrastructure for RusticOS, including:
+ *   - Programmable Interrupt Controller (PIC) initialization
+ *   - Interrupt Service Routine (ISR) handlers for exceptions and IRQs
+ *   - Keyboard interrupt handling (IRQ1)
+ *   - Timer interrupt handling (IRQ0) - available for future scheduling
+ *   - Exception handling for CPU exceptions
+ * 
+ * The interrupt system enables proper hardware I/O and paves the way for
+ * preemptive multitasking and real-time device handling.
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #include "interrupt.h"
 #include "keyboard.h"
 #include "terminal.h"

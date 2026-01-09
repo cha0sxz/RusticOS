@@ -1,16 +1,40 @@
+/*
+ * ============================================================================
+ * RusticOS Keyboard Driver Header (keyboard.h)
+ * ============================================================================
+ * 
+ * Defines the PS/2 keyboard driver interface for RusticOS.
+ * Handles keyboard input via interrupts (IRQ1) and provides a clean
+ * event-based interface for key presses.
+ * 
+ * Features:
+ *   - Interrupt-driven keyboard input (IRQ1)
+ *   - Scan code to ASCII conversion (handles both scan code set 1 and 2)
+ *   - Modifier key tracking (Shift, Ctrl, Alt)
+ *   - Event buffer for asynchronous key event handling
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #ifndef KEYBOARD_H
 #define KEYBOARD_H
 
 #include "types.h"
 
-// Key event structure used by terminal/keyboard code
+/**
+ * Key Event Structure
+ * 
+ * Represents a keyboard event with scan code, ASCII character, and modifier states.
+ * Used to pass keyboard events from the interrupt handler to the main kernel loop.
+ */
 struct KeyEvent {
-    uint8_t scan_code;
-    uint8_t ascii;
-    bool    pressed;    // whether key was pressed (vs released)
-    bool    shift;      // modifier state
-    bool    ctrl;       // modifier state
-    bool    alt;        // modifier state
+    uint8_t scan_code;  // Raw scan code from keyboard
+    uint8_t ascii;      // Converted ASCII character (0 if not printable)
+    bool    pressed;    // true if key was pressed, false if released
+    bool    shift;      // Shift modifier state at time of event
+    bool    ctrl;       // Ctrl modifier state at time of event
+    bool    alt;        // Alt modifier state at time of event
 };
 
 // Subset of set-1 scan codes used by the driver

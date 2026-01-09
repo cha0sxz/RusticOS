@@ -1,38 +1,62 @@
+/*
+ * ============================================================================
+ * RusticOS Interrupt Handling Header (interrupt.h)
+ * ============================================================================
+ * 
+ * Defines the interrupt handling system interface, including PIC configuration,
+ * IRQ definitions, and interrupt handler function declarations.
+ * 
+ * The interrupt system remaps hardware IRQs (0-15) to interrupt vectors (32-47)
+ * to avoid conflicts with CPU exception vectors (0-31).
+ * 
+ * Version: 1.0.1
+ * ============================================================================
+ */
+
 #ifndef INTERRUPT_H
 #define INTERRUPT_H
 
 #include "types.h"
 
-// PIC I/O Ports
-#define PIC1_COMMAND    0x20  // Master PIC command port
-#define PIC1_DATA       0x21  // Master PIC data port
-#define PIC2_COMMAND    0xA0  // Slave PIC command port
-#define PIC2_DATA       0xA1  // Slave PIC data port
+// ============================================================================
+// PIC (Programmable Interrupt Controller) I/O Ports
+// ============================================================================
+#define PIC1_COMMAND    0x20  // Master PIC command/status port
+#define PIC1_DATA       0x21  // Master PIC data/IMR (Interrupt Mask Register) port
+#define PIC2_COMMAND    0xA0  // Slave PIC command/status port
+#define PIC2_DATA       0xA1  // Slave PIC data/IMR port
 
-// PIC Commands
-#define PIC_EOI         0x20  // End of Interrupt command
-#define PIC_ICW1_INIT   0x10  // Initialization command word 1
-#define PIC_ICW1_ICW4   0x01  // ICW4 needed
-#define PIC_ICW4_8086   0x01  // 8086/8088 mode
+// ============================================================================
+// PIC Initialization Commands
+// ============================================================================
+#define PIC_EOI         0x20  // End of Interrupt command (sent after handling IRQ)
+#define PIC_ICW1_INIT   0x10  // Initialization Command Word 1: Start initialization
+#define PIC_ICW1_ICW4   0x01  // ICW1 flag: ICW4 is needed
+#define PIC_ICW4_8086   0x01  // ICW4: 8086/8088 mode (not MCS-80/85)
 
-// IRQ Numbers (mapped to interrupt vectors 32-47)
-#define IRQ_BASE        32
-#define IRQ_TIMER       0     // Timer interrupt (IRQ0)
-#define IRQ_KEYBOARD    1     // Keyboard interrupt (IRQ1)
-#define IRQ_CASCADE     2     // Cascade interrupt (IRQ2)
-#define IRQ_COM2        3     // COM2 (IRQ3)
-#define IRQ_COM1        4     // COM1 (IRQ4)
-#define IRQ_LPT2        5     // LPT2 (IRQ5)
-#define IRQ_FLOPPY      6     // Floppy disk (IRQ6)
-#define IRQ_LPT1        7     // LPT1 (IRQ7)
-#define IRQ_CMOS        8     // CMOS real-time clock (IRQ8)
-#define IRQ_FREE1       9     // Free (IRQ9)
-#define IRQ_FREE2       10    // Free (IRQ10)
-#define IRQ_FREE3       11    // Free (IRQ11)
-#define IRQ_PS2         12    // PS/2 mouse (IRQ12)
-#define IRQ_FPU         13    // FPU (IRQ13)
-#define IRQ_PRIMARY_ATA 14    // Primary ATA (IRQ14)
-#define IRQ_SECONDARY_ATA 15  // Secondary ATA (IRQ15)
+// ============================================================================
+// IRQ Definitions (Hardware Interrupt Requests)
+// ============================================================================
+// IRQs are remapped to interrupt vectors 32-47 (IRQ_BASE + IRQ number)
+#define IRQ_BASE        32    // Base interrupt vector for IRQs (avoiding exceptions 0-31)
+
+// Hardware IRQ assignments
+#define IRQ_TIMER       0     // Timer interrupt (IRQ0) - Used for scheduling
+#define IRQ_KEYBOARD    1     // Keyboard interrupt (IRQ1) - Used for input
+#define IRQ_CASCADE     2     // Cascade interrupt (IRQ2) - Links slave PIC to master
+#define IRQ_COM2        3     // COM2 serial port (IRQ3)
+#define IRQ_COM1        4     // COM1 serial port (IRQ4)
+#define IRQ_LPT2        5     // LPT2 parallel port (IRQ5)
+#define IRQ_FLOPPY      6     // Floppy disk controller (IRQ6)
+#define IRQ_LPT1        7     // LPT1 parallel port (IRQ7)
+#define IRQ_CMOS        8     // CMOS real-time clock (IRQ8) - Slave PIC
+#define IRQ_FREE1       9     // Free/redirected (IRQ9) - Slave PIC
+#define IRQ_FREE2       10    // Free (IRQ10) - Slave PIC
+#define IRQ_FREE3       11    // Free (IRQ11) - Slave PIC
+#define IRQ_PS2         12    // PS/2 mouse (IRQ12) - Slave PIC
+#define IRQ_FPU         13    // FPU coprocessor (IRQ13) - Slave PIC
+#define IRQ_PRIMARY_ATA 14    // Primary ATA hard disk (IRQ14) - Slave PIC
+#define IRQ_SECONDARY_ATA 15  // Secondary ATA hard disk (IRQ15) - Slave PIC
 
 // Function declarations
 extern "C" {

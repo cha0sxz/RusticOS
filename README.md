@@ -1,15 +1,20 @@
-# RusticOS - Simple x86_64 Operating System
+# RusticOS - Simple x86 Operating System
 
-A minimal operating system development environment built with NASM and QEMU for learning OS development concepts.
+**Version: 1.0.1**
+
+A minimal operating system development environment built with NASM and GCC for learning OS development concepts. Features a complete bootloader, 32-bit protected mode kernel, interrupt handling, command-line interface, and in-memory filesystem.
 
 ## Features
 
-- **Bootloader**: Simple BIOS bootloader that loads the kernel
-- **Kernel**: C++ kernel with text output capabilities, keyboard input, and command-line interface
-- **Command-Line Interface**: Interactive shell with commands for filesystem operations
-- **Filesystem**: In-memory hierarchical filesystem with directory and file operations
-- **Build System**: Makefile for easy development
-- **Emulation**: QEMU integration for testing without real hardware
+- **Multi-stage Bootloader**: Two-stage bootloader (16-bit real mode → 32-bit protected mode)
+- **32-bit Protected Mode Kernel**: C++ kernel with comprehensive interrupt handling
+- **Interrupt System**: Full IDT, PIC remapping, and interrupt-driven I/O
+- **Command-Line Interface**: Interactive shell with full command set
+- **In-Memory Filesystem**: Hierarchical filesystem with directory and file operations
+- **Keyboard Driver**: Interrupt-driven PS/2 keyboard input (IRQ1)
+- **VGA Terminal**: 80x25 text mode with color support and title bar
+- **Build System**: Makefile for easy development and QEMU integration
+- **Graceful Shutdown**: Proper system shutdown with QEMU exit support
 
 ## Prerequisites
 
@@ -38,17 +43,23 @@ sudo apt install nasm qemu-system-x86 make
 brew install nasm qemu make
 ```
 
-## Project structure
+## Project Structure
 
-- `boot/`: bootloader and loader assembly sources and binaries
-- `src/`: kernel sources (C++), startup code, and system components
-  - `kernel.cpp`: Main kernel entry point and command loop
-  - `terminal.cpp`: VGA text-mode display interface
-  - `keyboard.cpp`: PS/2 keyboard input handling
-  - `command.cpp`: Command parsing and execution system
-  - `filesystem.cpp`: In-memory filesystem implementation
-- `build/`: intermediate object files and build artifacts (generated)
-- `scripts/`: helper scripts for building and running
+- `boot/`: Bootloader and loader assembly sources and binaries
+  - `bootloader.asm`: First-stage bootloader (512 bytes, loads loader)
+  - `loader.asm`: Second-stage loader (switches to protected mode, loads kernel)
+- `src/`: Kernel sources (C++ and assembly), startup code, and system components
+  - `kernel.cpp`: Main kernel entry point and interrupt-driven event loop
+  - `crt0.s`: Kernel startup code and interrupt service routine stubs
+  - `interrupt.h/cpp`: Interrupt handling (IDT, PIC, ISRs, IRQs)
+  - `terminal.h/cpp`: VGA text-mode display interface (80x25)
+  - `keyboard.h/cpp`: PS/2 keyboard driver (interrupt-driven, IRQ1)
+  - `command.h/cpp`: Command parsing and execution system
+  - `filesystem.h/cpp`: In-memory hierarchical filesystem
+  - `types.h`: Type definitions and standard library stubs
+  - `cxxabi.cpp`: C++ runtime and memory allocation (bump allocator)
+- `build/`: Intermediate object files and build artifacts (generated)
+- `scripts/`: Helper scripts for building and running
 
 ## Common commands
 
@@ -85,20 +96,27 @@ make distclean
 - Loads the kernel from disk into memory
 - Jumps to the kernel entry point
 
-### 3. Kernel (kernel.cpp)
+### 3. Kernel (kernel.cpp + crt0.s)
 - Written in C++ with assembly startup code (crt0.s)
+- Runs in 32-bit protected mode with interrupt support
+- Initializes IDT (Interrupt Descriptor Table) and PIC (Programmable Interrupt Controller)
 - Provides interactive command-line interface
-- Handles keyboard input via polling
-- Manages an in-memory filesystem
-- Supports commands: help, mkdir, cd, ls, pwd, touch, cat, write, echo, clear
+- Handles keyboard input via interrupts (IRQ1)
+- Manages an in-memory hierarchical filesystem
+- Supports commands: `help`, `clear`, `echo`, `makedir`, `cd`, `lsd`, `pwd`, `makefile`, `cat`, `write`, `remove`, `move`, `copy`, `shutdown`
 
 ### 4. Build Process
 1. NASM compiles bootloader and loader assembly files to binary format
-2. GCC/G++ compiles C++ kernel sources to object files
-3. Linker creates the kernel ELF binary, then converts to flat binary
-4. `dd` creates a disk image
-5. Bootloader, loader, and kernel are written to the image in sequence
-6. QEMU boots from the image
+2. NASM compiles crt0.s (kernel startup) to object file
+3. GCC/G++ compiles C++ kernel sources to object files
+4. Linker creates the kernel ELF binary, then converts to flat binary
+5. Build script calculates kernel size and generates sector count includes
+6. `dd` creates a disk image (512 bytes per sector)
+7. Bootloader, loader, and kernel are written to the image in sequence:
+   - Sector 0: Bootloader (512 bytes)
+   - Sectors 1-2: Loader (variable size, padded)
+   - Sectors 3+: Kernel (variable size)
+8. QEMU boots from the image and runs RusticOS
 
 ## Development
 
@@ -150,17 +168,36 @@ gdb build/kernel.elf
 
 For detailed information about the command-line interface and filesystem, see [interface_and_filesystem.md](interface_and_filesystem.md).
 
+## Version History
+
+### Version 1.0.1 (Current)
+- Added interrupt handling system (IDT, PIC, ISRs, IRQs)
+- Implemented interrupt-driven keyboard input (IRQ1)
+- Added `remove`, `move`, and `copy` commands
+- Fixed `pwd` command with full path resolution
+- Added `shutdown` command with QEMU exit support
+- Improved bootloader and loader with visible delays
+- Comprehensive code documentation and comments
+- Improved source code readability and organization
+
+### Version 1.0.0
+- Initial release with basic CLI and filesystem
+- Multi-stage bootloader implementation
+- Command-line interface with help system
+- In-memory hierarchical filesystem
+
 ## Next Steps
 
-This is a basic foundation. Consider adding:
-- Memory management (heap allocator)
-- Process scheduling
-- Persistent file storage (save filesystem to disk)
-- Interrupt-driven keyboard (replace polling)
-- More commands (rm, mv, cp, etc.)
-- Command history and tab completion
-- Networking stack
-- Device drivers for additional hardware
+Future enhancements to consider:
+- **Persistent storage**: Save filesystem to disk and load on boot
+- **Process management**: Multitasking and process scheduling
+- **Memory management**: Proper heap allocator with malloc/free
+- **Command history**: Up/down arrow support
+- **Tab completion**: Auto-complete commands and paths
+- **File system format**: Implement actual disk-based filesystem (FAT32, ext2, etc.)
+- **Networking stack**: TCP/IP stack and network drivers
+- **Device drivers**: Additional hardware support (mouse, sound, USB)
+- **Memory protection**: Virtual memory and page tables
 
 ## License
 

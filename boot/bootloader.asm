@@ -150,7 +150,7 @@ print_string:
 ; ============================================================================
 ; Delay Function
 ; ============================================================================
-; Provides a visible delay for boot messages (approximately 1-1.5 seconds)
+; Provides a visible delay for boot messages (approximately 250ms)
 ; Uses triple-nested loops to create a consistent delay across different systems
 ; Preserves all registers
 ; ============================================================================
@@ -158,7 +158,7 @@ delay:
     push ax
     push cx
     push dx
-    mov ax, 0x0020      ; Outer loop counter (32 iterations = half of 64)
+    mov ax, 0x0008      ; Outer loop counter (8 iterations for ~250ms delay)
 .delay_outer:
     mov cx, 0xFFFF      ; Middle loop counter (65535 iterations)
 .delay_middle:

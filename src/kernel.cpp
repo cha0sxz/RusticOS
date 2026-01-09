@@ -594,6 +594,7 @@ extern "C" void kernel_main() {
     // Set up interrupt handling for hardware devices
     serial_write("Initializing interrupt handling system...\n");
     init_pic();              // Initialize Programmable Interrupt Controller (remap IRQs)
+    init_pit();              // Initialize Programmable Interval Timer (PIT)
     // Note: IDT is already initialized in crt0.s via init_idt() call
     
     // ========================================================================

@@ -134,6 +134,8 @@ void CommandSystem::execute_command()
         } else {
             terminal.write("Usage: copy <source> <destination>\n");
         }
+    } else if (strcmp(current_command.name, "time") == 0) {
+        cmd_time();
     } else if (strcmp(current_command.name, "shutdown") == 0) {
         cmd_shutdown();
     } else {
@@ -197,6 +199,34 @@ void CommandSystem::clear_command(Command& cmd)
     }
 }
 
+/**
+ * Helper function to convert uint64_t to string
+ * @param value The number to convert
+ * @param buffer Buffer to store the string (must be at least 32 bytes)
+ */
+static void uint64_to_string(uint64_t value, char* buffer) {
+    if (value == 0) {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return;
+    }
+    
+    char rev_buf[32];
+    int rev_pos = 0;
+    uint64_t temp = value;
+    
+    while (temp > 0) {
+        rev_buf[rev_pos++] = '0' + (temp % 10);
+        temp /= 10;
+    }
+    
+    int pos = 0;
+    for (int i = rev_pos - 1; i >= 0; i--) {
+        buffer[pos++] = rev_buf[i];
+    }
+    buffer[pos] = '\0';
+}
+
 // Stub implementations
 void CommandSystem::cmd_help() {
     terminal.write("Available commands:\n");
@@ -211,6 +241,7 @@ void CommandSystem::cmd_help() {
     terminal.write("  remove - Remove file or empty directory\n");
     terminal.write("  move - Move/rename file or directory\n");
     terminal.write("  copy - Copy file\n");
+    terminal.write("  time - Display system clock (uptime) and real-time clock\n");
     terminal.write("  shutdown - Shutdown the system\n");
 }
 
@@ -317,6 +348,90 @@ void CommandSystem::cmd_copy(const char* src, const char* dest) {
         terminal.write(" to ");
         terminal.write(dest);
         terminal.write("\n");
+    }
+}
+
+void CommandSystem::cmd_time() {
+    char num_buf[32];
+    char time_buf[64];
+    
+    // Display system clock information (uptime)
+    terminal.write("System Clock (Uptime):\n");
+    
+    uint64_t ticks = get_ticks();
+    uint64_t seconds = get_seconds();
+    uint64_t milliseconds = get_milliseconds();
+    
+    // Display ticks
+    terminal.write("  Ticks: ");
+    uint64_to_string(ticks, num_buf);
+    terminal.write(num_buf);
+    terminal.write("\n");
+    
+    // Display seconds
+    terminal.write("  Seconds: ");
+    uint64_to_string(seconds, num_buf);
+    terminal.write(num_buf);
+    terminal.write("\n");
+    
+    // Display milliseconds
+    terminal.write("  Milliseconds: ");
+    uint64_to_string(milliseconds, num_buf);
+    terminal.write(num_buf);
+    terminal.write("\n");
+    
+    // Display Real-Time Clock
+    terminal.write("\nReal-Time Clock:\n");
+    RTCTime rtc_time;
+    if (get_rtc_time(&rtc_time)) {
+        // Format time as HH:MM:SS
+        time_buf[0] = '0' + (rtc_time.hour / 10);
+        time_buf[1] = '0' + (rtc_time.hour % 10);
+        time_buf[2] = ':';
+        time_buf[3] = '0' + (rtc_time.minute / 10);
+        time_buf[4] = '0' + (rtc_time.minute % 10);
+        time_buf[5] = ':';
+        time_buf[6] = '0' + (rtc_time.second / 10);
+        time_buf[7] = '0' + (rtc_time.second % 10);
+        time_buf[8] = '\0';
+        
+        terminal.write("  Time: ");
+        terminal.write(time_buf);
+        terminal.write("\n");
+        
+        // Format date as YYYY-MM-DD or MM/DD/YY
+        if (rtc_time.century > 0) {
+            // Full year format: YYYY-MM-DD
+            uint64_to_string((uint64_t)rtc_time.century * 100 + rtc_time.year, num_buf);
+            terminal.write("  Date: ");
+            terminal.write(num_buf);
+            terminal.write("-");
+            if (rtc_time.month < 10) terminal.write("0");
+            uint64_to_string((uint64_t)rtc_time.month, num_buf);
+            terminal.write(num_buf);
+            terminal.write("-");
+            if (rtc_time.day < 10) terminal.write("0");
+            uint64_to_string((uint64_t)rtc_time.day, num_buf);
+            terminal.write(num_buf);
+            terminal.write("\n");
+        } else {
+            // Short format: MM/DD/YY
+            terminal.write("  Date: ");
+            if (rtc_time.month < 10) terminal.write("0");
+            uint64_to_string((uint64_t)rtc_time.month, num_buf);
+            terminal.write(num_buf);
+            terminal.write("/");
+            if (rtc_time.day < 10) terminal.write("0");
+            uint64_to_string((uint64_t)rtc_time.day, num_buf);
+            terminal.write(num_buf);
+            terminal.write("/");
+            if (rtc_time.year < 10) terminal.write("0");
+            uint64_to_string((uint64_t)rtc_time.year, num_buf);
+            terminal.write(num_buf);
+            terminal.write("\n");
+        }
+    } else {
+        terminal.write("  Error: Could not read RTC\n");
     }
 }
 

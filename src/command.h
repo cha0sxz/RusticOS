@@ -88,6 +88,7 @@ public:
     void cmd_remove(const char* name);
     void cmd_move(const char* src, const char* dest);
     void cmd_copy(const char* src, const char* dest);
+    void cmd_time();
     void cmd_shutdown();
 };
 
